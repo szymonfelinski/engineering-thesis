@@ -21,18 +21,11 @@ wagonName = {
             1:"Beta", 
             2:"Omega"
             }
-            
-csv_file = []
-csv_file_geo = []
-writer = []
-writer_geo = []
+
 geocode_process = []
 display_process = []
 main_process = []
 d = [128, 64]
-
-road = "unresolved"
-house = "unresolved"
 
 import multiprocessing as mp
 
@@ -45,8 +38,6 @@ import csv
 from traceback_with_variables import activate_by_import
 import RPi.GPIO as gpio #library that control pins
 
-
-
 if gDisplayData:
     #display libraries
     from luma.core.render import canvas
@@ -56,6 +47,8 @@ if gDisplayData:
 
 if gReverseGeocode:
     from OSMPythonTools.nominatim import Nominatim #maps library (reverse geocoding)
+    import logging
+    logging.getLogger('OSMPythonTools').setLevel(logging.ERROR) #https://github.com/mocnik-science/osm-python-tools#logging #suppressing the output of Nominatim.
     geocode_api = Nominatim() #binding reverse geocoding to a process variable
     #reverse_geocode_result = geocode_api.query(40.714224, -73.961452, reverse = True)
     #print(reverse_geocode_result.displayName())
@@ -116,33 +109,34 @@ def loggingFuncInit(geocoding):
 #    writer_geo = csv.writer(csv_file_geo, delimiter = ';')
 #    writer_geo.writerow(['t', 'date_diff', 'new_date_diff', 'newsleep'])
 
-def init():
-    csv_file_init = None
-    writer_init = None
-    csv_file_geo_init = None
-    writer_geo_init = None
-    
-    if gLog:
-        try:
-            csv_file_init, writer_init = loggingFuncInit(0)
-        except:
-            print("Couldn't init log file")
-    
-    if gLogGeocode:
-        try:
-            csv_file_geo_init, writer_geo_init = loggingFuncInit(1)
-        except:
-            print("Couldn't init debug file")
-    
-    global csv_file
-    csv_file = csv_file_init
-    global writer
-    writer = writer_init
-    #04.11 - changed from 'debug' to 'geo'
-    global csv_file_geo
-    csv_file_geo = csv_file_geo_init
-    global writer_geo
-    writer_geo = writer_geo_init
+#def init():
+#    csv_file_init = None
+#    writer_init = None
+#    csv_file_geo_init = None
+#    writer_geo_init = None
+#    
+#    if gLog:
+#        try:
+#            csv_file_init, writer_init = loggingFuncInit(0)
+#        except:
+#            print("Couldn't init log file")
+#    
+#    if gLogGeocode:
+#        try:
+#            csv_file_geo_init, writer_geo_init = loggingFuncInit(1)
+#        except:
+#            print("Couldn't init debug file")
+#    
+#    global csv_file
+#    csv_file = csv_file_init
+#    global writer
+#    writer = writer_init
+#    #04.11 - changed from 'debug' to 'geo'
+#    global csv_file_geo
+#    csv_file_geo = csv_file_geo_init
+#    global writer_geo
+#    writer_geo = writer_geo_init
+##05.11 - removed this function.
 
 def gpsResolve():
     return gpsd.get_current()
@@ -156,6 +150,7 @@ def reverseGeocode(sentGeo):
                 sentGeo.send(geocodingResult) #send data to pipe
                 #print("GEOCODE: Address found.")
                 #print(geocodingResult.address())
+            time.sleep(5) #limit the number of calls to API to 0.2 per second - possible cause of CPU hangs if not limited.
         except KeyboardInterrupt: #this is important. without it, the display process would run indefinitely.
             raise SystemExit
         except:
@@ -197,11 +192,16 @@ def returnTypeOfWagon(wagonNumber):     #added 14.09.2021
     return wagonName.get(wagonNumber, "Invalid type")
 
 def displayData(receivedData):
-    global road
-    global house
+    #global road
+    #global house
+    
+    if gReverseGeocode: 
+        receivedGeo, sentGeo = mp.Pipe()
+        geocode_process = mp.Process(target = reverseGeocode, args = ((sentGeo), )) #added 08.09.21
+        print("DISPLAY: Starting reverse geocode process.")
+        geocode_process.start()
+        
     global screenNumber
-    global csv_file_geo
-    global writer_geo
     global wagonType
     gpio.setmode(gpio.BCM)
     gpio.setup(17, gpio.IN, pull_up_down = gpio.PUD_DOWN)
@@ -211,17 +211,20 @@ def displayData(receivedData):
     gpio.add_event_detect(27, gpio.RISING, callback = button_1_pressed, bouncetime = 300)
     gpio.add_event_detect(22, gpio.RISING, callback = button_2_pressed, bouncetime = 300)
     
+    road = "unresolved"
+    house = "unresolved"
+    
     if gDisplayData:
         try:
             display = displayInit()
         except:
-            print("DISPLAY: Couldn't init display")
-            
-    if gReverseGeocode: #TODO
-        receivedGeo, sentGeo = mp.Pipe()
-        geocode_process = mp.Process(target = reverseGeocode, args = ((sentGeo), )) #added 08.09.21
-        print("DISPLAY: Starting reverse geocode process.")
-        geocode_process.start()
+            print("DISPLAY: Couldn't init display")    
+    
+    if gLogGeocode: #this replaces init() as of 05.11.21
+        try:
+            csv_file_geo, writer_geo = loggingFuncInit(1)
+        except:
+            print("Couldn't init debug file")
     
     while True: 
         #print("screen number in loop: ", screenNumber)
@@ -376,16 +379,17 @@ def displayData(receivedData):
                     legacy.text(draw, (0, 15), "Koniec programu ", fill = "white", font = legacy.font.SINCLAIR_FONT) #Wagon type
                 except:
                     time.sleep(0)
-                    
-        
-        
 
 def processingData(sentData):
-    global csv_file
-    global writer
     
     #global reverse_geocode_result
     #init() - moved to beginning of program as of 04.11.21
+    if gLog: #this replaces init() as of 05.11.21
+        try:
+            csv_file, writer = loggingFuncInit(0)
+        except:
+            print("Couldn't init log file")
+    
     slowDown = False
     prevDateDiff = 0
     while True:
@@ -425,10 +429,14 @@ def processingData(sentData):
             try:
                 writer.writerow([cur_time, date_diff - prevDateDiff, ax, ay, az, a_length, packet.lat, packet.lon, packet.hspeed])
                 prevDateDiff = date_diff
+                csv_file.flush()
             except:
                 print("MAIN: Couldn't write to log file")
         
-        cycle = (time.time() - start_time) - date_diff #this calculates current cycle length
+        try:
+            cycle = (time.time() - start_time) - date_diff #this calculates current cycle length
+        except:
+            print("MAIN: Couldn't calculate cycle")
         
         #if gLogGeocode: #changed function from cycle time debugging to reverse geocode logging - 04.11.21
         #    try:
@@ -451,7 +459,7 @@ def processingData(sentData):
 
 
 if __name__ == "__main__":
-    init()
+    #init()
     mp.set_start_method('fork')
     receivedData, sentData = mp.Pipe()
     main_process = mp.Process(target = processingData, args = ((sentData), ))
