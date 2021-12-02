@@ -56,8 +56,6 @@ if gReverseGeocode:
 #global variables
 start_time = time.time() #save date and time of script start (seconds since epoch - UTC)
 
-mpu = mpu6050(0x68) #0x68 is device address on i2c bus
-
 # Connect to the local gpsd
 gpsd.connect() #this takes a while (MUST BE SET UP USING sudo gpsd /dev/serial0 -F /var/run/gpsd.sock !!! #EDIT 06.08.21 - added automatic execution at system startup.)
 
@@ -147,10 +145,10 @@ def reverseGeocode(sentGeo):
             packet = gpsResolve() #this works better than sending a packet from display.
             geocodingResult = geocode_api.query(packet.lat, packet.lon, reverse = True, zoom = 18) #takes a while the first time
             if geocodingResult.isReverse(): #if the response is actual reverse geocode data
-                sentGeo.send([geocodingResult]) #send data to pipe
-                #print("GEOCODE: Address found.")
+                sentGeo.send(geocodingResult) #send data to pipe
+                print("GEOCODE: Address found.")
                 #print(geocodingResult.address())
-            time.sleep(1) #limit the number of calls to API to 0.2 per second - possible cause of CPU hangs if not limited.
+            time.sleep(5) #limit the number of calls to API - possible cause of CPU hangs if not limited.
         except KeyboardInterrupt: #this is important. without it, the display process would run indefinitely.
             raise SystemExit
         except:
@@ -232,12 +230,14 @@ def displayData(receivedData):
         cur_timestamp = time.localtime(cur_time)
         
         #resolve reverse geocoded address
-        #if gReverseGeocode:
-        try:
-            while receivedGeo.poll(): #only pull the latest result
-                reverse_geocode_result = receivedGeo.recv()
-        except:
-            print("DISPLAY: Can't resolve address")
+        if gReverseGeocode:
+            try:
+                while receivedGeo.poll(): #only pull the latest result
+                    reverse_geocode_result = receivedGeo.recv()
+                    
+                #print(reverse_geocode_result.address())
+            except:
+                print("DISPLAY: Can't resolve address")
     
         oldroad = road
         oldhouse = house
@@ -246,7 +246,6 @@ def displayData(receivedData):
         
         try:
             road = reverse_geocode_result.address()['road']
-
         except: #fallback to old address if reverse geocoding failed (and quarter handling - 10.09.21)
             try:
                 road = reverse_geocode_result.address()['quarter'] #this is needed in case it's "osiedle" and not "ulica".
@@ -256,9 +255,10 @@ def displayData(receivedData):
             
         try:                
             house = reverse_geocode_result.address()['house_number']
-            #print("DISPLAY: " + road + " " + house)
         except: #fallback to old address if reverse geocoding failed
             house = oldhouse
+        
+        #print("DISPLAY: " + road + " " + house)
         
         if gLogGeocode: #changed function from cycle time debugging to reverse geocode logging - 04.11.21
             try:
@@ -383,8 +383,11 @@ def displayData(receivedData):
                     legacy.text(draw, (0, 15), "Koniec programu ", fill = "white", font = legacy.font.SINCLAIR_FONT) #Wagon type
                 except:
                     time.sleep(0)
+        time.sleep(0.1)
 
 def processingData(sentData):
+    
+    mpu = mpu6050(0x68) #0x68 is device address on i2c bus
     
     #global reverse_geocode_result
     #init() - moved to beginning of program as of 04.11.21
