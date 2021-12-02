@@ -98,7 +98,7 @@ def loggingFuncInit(geocoding):
     csv_init = open(file_name, 'w+', encoding = 'UTF8', newline = '')
     writer_init = csv.writer(csv_init, delimiter = ';')
     if geocoding:
-        writer_init.writerow(['unix time', 'road', 'house', 'reverse latitude', 'reverse longitude']) #changed to geocoding file 04.11.21 - added packet data 08.11.21
+        writer_init.writerow(['unix time', 'road', 'house', 'latitude', 'longitude', 'hspeed']) #changed to geocoding file 04.11.21 - added packet data 08.11.21
     else:
         writer_init.writerow(['unix time', 'dt', 'ax', 'ay', 'az', 'a_length', 'latitude', 'longitude', 'speed']) #csv headers - removed road and street - 06.09.21 - added unix time - 04.11.21
     return csv_init, writer_init
@@ -147,10 +147,10 @@ def reverseGeocode(sentGeo):
             packet = gpsResolve() #this works better than sending a packet from display.
             geocodingResult = geocode_api.query(packet.lat, packet.lon, reverse = True, zoom = 18) #takes a while the first time
             if geocodingResult.isReverse(): #if the response is actual reverse geocode data
-                sentGeo.send([geocodingResult, packet]) #send data to pipe
+                sentGeo.send([geocodingResult]) #send data to pipe
                 #print("GEOCODE: Address found.")
                 #print(geocodingResult.address())
-            time.sleep(5) #limit the number of calls to API to 0.2 per second - possible cause of CPU hangs if not limited.
+            time.sleep(1) #limit the number of calls to API to 0.2 per second - possible cause of CPU hangs if not limited.
         except KeyboardInterrupt: #this is important. without it, the display process would run indefinitely.
             raise SystemExit
         except:
@@ -232,38 +232,40 @@ def displayData(receivedData):
         cur_timestamp = time.localtime(cur_time)
         
         #resolve reverse geocoded address
-        if gReverseGeocode:
-            try:
-                while receivedGeo.poll(): #only pull the latest result
-                    reverse_geocode_result, reverse_geocode_packet = receivedGeo.recv()
-            except:
-                print("DISPLAY: Can't resolve address")
+        #if gReverseGeocode:
+        try:
+            while receivedGeo.poll(): #only pull the latest result
+                reverse_geocode_result = receivedGeo.recv()
+        except:
+            print("DISPLAY: Can't resolve address")
+    
+        oldroad = road
+        oldhouse = house
         
-            oldroad = road
-            oldhouse = house
-            
-            try:
-                road = reverse_geocode_result.address()['road']
+        packet = gpsResolve()
+        
+        try:
+            road = reverse_geocode_result.address()['road']
 
-            except: #fallback to old address if reverse geocoding failed (and quarter handling - 10.09.21)
-                try:
-                    road = reverse_geocode_result.address()['quarter'] #this is needed in case it's "osiedle" and not "ulica".
-                except: 
-                    road = oldroad
-                #print("DISPLAY: Old: " + road + " " + house)
-                
-            try:                
-                house = reverse_geocode_result.address()['house_number']
-                #print("DISPLAY: " + road + " " + house)
-            except: #fallback to old address if reverse geocoding failed
-                house = oldhouse
+        except: #fallback to old address if reverse geocoding failed (and quarter handling - 10.09.21)
+            try:
+                road = reverse_geocode_result.address()['quarter'] #this is needed in case it's "osiedle" and not "ulica".
+            except: 
+                road = oldroad
+            #print("DISPLAY: Old: " + road + " " + house)
             
-            if gLogGeocode: #changed function from cycle time debugging to reverse geocode logging - 04.11.21
-                try:
-                    writer_geo.writerow([cur_time, road, house, reverse_geocode_packet.lat, reverse_geocode_packet.lon])
-                    csv_file_geo.flush()
-                except:
-                    print("DISPLAY: Couldn't write to debug file")
+        try:                
+            house = reverse_geocode_result.address()['house_number']
+            #print("DISPLAY: " + road + " " + house)
+        except: #fallback to old address if reverse geocoding failed
+            house = oldhouse
+        
+        if gLogGeocode: #changed function from cycle time debugging to reverse geocode logging - 04.11.21
+            try:
+                writer_geo.writerow([cur_time, road, house, packet.lat, packet.lon, packet.hspeed])
+                csv_file_geo.flush()
+            except:
+                print("DISPLAY: Couldn't write to debug file")
         
         if screenNumber == 0:
             with canvas(display) as draw: #execution time: around 100ms
@@ -291,7 +293,8 @@ def displayData(receivedData):
         elif screenNumber == 1:
             try:
                 while receivedData.poll(): #this small loop reads only the last item in the pipe (basically skips elements until none are left)
-                    a_length, packet, cycle = receivedData.recv()
+                    #a_length, packet, cycle = receivedData.recv()
+                    a_length, cycle = receivedData.recv()
             except KeyboardInterrupt: #this is important. without it, the display process would run indefinitely.
                 if gReverseGeocode:
                     geocode_process.terminate()
@@ -402,11 +405,11 @@ def processingData(sentData):
            exit()
         #print("Temp : " + str(mpu.get_temp())) #thermometer module (unused)
         
-        #get gps position
-        try:
-            packet = gpsResolve()
-        except:
-            print("MAIN: Can't resolve GPS")
+        #get gps position #commented out 08.11.21
+        #try:
+        #    packet = gpsResolve()
+        #except:
+        #    print("MAIN: Can't resolve GPS")
         
         #moved road and house to displaydata - 06.09.21
         
@@ -428,7 +431,8 @@ def processingData(sentData):
         
         if gLog:
             try:
-                writer.writerow([cur_time, date_diff - prevDateDiff, ax, ay, az, a_length, packet.lat, packet.lon, packet.hspeed])
+                #writer.writerow([cur_time, date_diff - prevDateDiff, ax, ay, az, a_length, packet.lat, packet.lon, packet.hspeed])
+                writer.writerow([cur_time, date_diff - prevDateDiff, ax, ay, az, a_length, 'removed', 'removed', 'removed'])
                 csv_file.flush()
                 prevDateDiff = date_diff
             except:
@@ -443,7 +447,8 @@ def processingData(sentData):
         #        print("MAIN: Couldn't write to debug file")
         
         try:
-            sentData.send([a_length, packet, cycle])
+            #sentData.send([a_length, packet, cycle])
+            sentData.send([a_length, cycle])
         except KeyboardInterrupt: #this is important. without it, the processes would run indefinitely.
             raise SystemExit
         except:
