@@ -98,7 +98,7 @@ def loggingFuncInit(geocoding):
     csv_init = open(file_name, 'w+', encoding = 'UTF8', newline = '')
     writer_init = csv.writer(csv_init, delimiter = ';')
     if geocoding:
-        writer_init.writerow(['unix time', 'road', 'house']) #changed to geocoding file 04.11.21
+        writer_init.writerow(['unix time', 'road', 'house', 'reverse latitude', 'reverse longitude']) #changed to geocoding file 04.11.21 - added packet data 08.11.21
     else:
         writer_init.writerow(['unix time', 'dt', 'ax', 'ay', 'az', 'a_length', 'latitude', 'longitude', 'speed']) #csv headers - removed road and street - 06.09.21 - added unix time - 04.11.21
     return csv_init, writer_init
@@ -147,7 +147,7 @@ def reverseGeocode(sentGeo):
             packet = gpsResolve() #this works better than sending a packet from display.
             geocodingResult = geocode_api.query(packet.lat, packet.lon, reverse = True, zoom = 18) #takes a while the first time
             if geocodingResult.isReverse(): #if the response is actual reverse geocode data
-                sentGeo.send(geocodingResult) #send data to pipe
+                sentGeo.send([geocodingResult, packet]) #send data to pipe
                 #print("GEOCODE: Address found.")
                 #print(geocodingResult.address())
             time.sleep(5) #limit the number of calls to API to 0.2 per second - possible cause of CPU hangs if not limited.
@@ -235,7 +235,7 @@ def displayData(receivedData):
         if gReverseGeocode:
             try:
                 while receivedGeo.poll(): #only pull the latest result
-                    reverse_geocode_result = receivedGeo.recv()
+                    reverse_geocode_result, reverse_geocode_packet = receivedGeo.recv()
             except:
                 print("DISPLAY: Can't resolve address")
         
@@ -245,7 +245,7 @@ def displayData(receivedData):
             try:
                 road = reverse_geocode_result.address()['road']
 
-            except: #fallback to old address if reverse geocoding failed (and quarter handling #10.09.21)
+            except: #fallback to old address if reverse geocoding failed (and quarter handling - 10.09.21)
                 try:
                     road = reverse_geocode_result.address()['quarter'] #this is needed in case it's "osiedle" and not "ulica".
                 except: 
@@ -260,7 +260,8 @@ def displayData(receivedData):
             
             if gLogGeocode: #changed function from cycle time debugging to reverse geocode logging - 04.11.21
                 try:
-                    writer_geo.writerow([cur_time, road, house])
+                    writer_geo.writerow([cur_time, road, house, reverse_geocode_packet.lat, reverse_geocode_packet.lon])
+                    csv_file_geo.flush()
                 except:
                     print("DISPLAY: Couldn't write to debug file")
         
@@ -428,15 +429,12 @@ def processingData(sentData):
         if gLog:
             try:
                 writer.writerow([cur_time, date_diff - prevDateDiff, ax, ay, az, a_length, packet.lat, packet.lon, packet.hspeed])
-                prevDateDiff = date_diff
                 csv_file.flush()
+                prevDateDiff = date_diff
             except:
                 print("MAIN: Couldn't write to log file")
         
-        try:
-            cycle = (time.time() - start_time) - date_diff #this calculates current cycle length
-        except:
-            print("MAIN: Couldn't calculate cycle")
+        cycle = (time.time() - start_time) - date_diff #this calculates current cycle length
         
         #if gLogGeocode: #changed function from cycle time debugging to reverse geocode logging - 04.11.21
         #    try:
