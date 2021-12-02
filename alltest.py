@@ -4,12 +4,13 @@ gLogGeocode = 1 #will the csv debug file be written?
 gLog = 1 #will the csv data file be written? (if 0, the program has no stop condition!)
 gDisplayData = 1 #display data on the display?
 gReverseGeocode = 1 #attempt to reverse geocode GPS data?
-gRecording_time = 1800 #time of recording in seconds
 Tp = 0.1 #discrete step time, framerate
 displayTp = 0.3 #framerate for the display
-warning_threshold = 12 #acceleration at which a message will appear
 
-screenNumber = 0 #tells which screen is currently showed. 0 is starting screen, 1 is working program, 2 is ending screen
+gGradingTime = 180 #length of grading window in seconds
+
+
+screenNumber = 0 #tells which screen is currently shown. 0 is starting screen, 1 is working program, 2 is ending screen
 totalScreenNumber = 2 #total number of screens
 newDataFlag = 0
 wagonType = 0 #choose wagon type
