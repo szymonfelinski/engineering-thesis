@@ -113,7 +113,7 @@ def loggingFuncInit(geocoding):
     if geocoding:
         writer_init.writerow(['unix time', 'road', 'house', 'latitude', 'longitude', 'hspeed']) #changed to geocoding file 04.11.21 - added packet data 08.11.21
     else:
-        writer_init.writerow(['set time', 'actual time', 'ax', 'ay', 'az', 'day', 'daz', 'day_sum', 'daz_sum', 'gx', 'gy', 'gz', 'latitude', 'longitude', 'hspeed']) #csv headers - removed road and street - 06.09.21 - added unix time - 04.11.21
+        writer_init.writerow(['set time', 'actual time', 'ax', 'ay', 'az', 'day', 'daz', 'day_sum', 'daz_sum', 'average_length', 'gx', 'gy', 'gz', 'latitude', 'longitude', 'hspeed']) #csv headers - removed road and street - 06.09.21 - added unix time - 04.11.21
     return file_name, csv_init, writer_init
 
 #def debugFuncInit(): #old debug file init - removed 08.08.2021
@@ -500,7 +500,7 @@ def processingData(sentData):
         try:
             if newDataFlag: #added 11.11.21
                 try:
-                    file_name, csv_file, writer = loggingFuncInit(0) #changed to new file every new data - 29.11.21
+                    writer.writerow(["NEW DATA", "NEW DATA", "NEW DATA", "NEW DATA", "NEW DATA", "NEW DATA", "NEW DATA", "NEW DATA", "NEW DATA", "NEW DATA", "NEW DATA", "NEW DATA", "NEW DATA", "NEW DATA", "NEW DATA", "NEW DATA"])
                     newDataFlag = 0
                 except:
                     print("MAIN: Couldn't write to log file")
@@ -605,7 +605,7 @@ def processingData(sentData):
             else:
                 time.sleep(0.005)
         except KeyboardInterrupt:
-            pass
+            raise SystemExit
     
     GPSProcess.terminate()
 
