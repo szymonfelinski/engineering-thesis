@@ -4,12 +4,13 @@ gLogGeocode = 1 #will the csv debug file be written?
 gLog = 1 #will the csv data file be written? (if 0, the program has no stop condition!)
 gDisplayData = 1 #display data on the display?
 gReverseGeocode = 1 #attempt to reverse geocode GPS data?
-gRecording_time = 1800 #time of recording in seconds
 Tp = 0.1 #discrete step time, framerate
 displayTp = 0.3 #framerate for the display
-warning_threshold = 12 #acceleration at which a message will appear
 
-screenNumber = 0 #tells which screen is currently showed. 0 is starting screen, 1 is working program, 2 is ending screen
+gGradingTime = 180 #time to grade (seconds)
+sampleSize = gGradingTime / Tp
+
+screenNumber = 0 #tells which screen is currently shown. 0 is starting screen, 1 is working program, 2 is ending screen
 totalScreenNumber = 2 #total number of screens
 newDataFlag = 0
 wagonType = 0 #choose wagon type
@@ -34,9 +35,9 @@ import multiprocessing as mp
 import signal
 import gpsd #GPS library
 import time
+import numpy as np
 from mpu6050 import mpu6050 #imu library
 import math
-import time
 import csv
 from traceback_with_variables import activate_by_import
 import RPi.GPIO as gpio #library that control pins
@@ -425,6 +426,11 @@ def processingData(sentData):
             if newDataFlag and gLog: #added 11.11.21, changed 29.11.21
                 try:
                     #grading algorithm variables
+                    samplesdy = np.zeros(sampleSize)
+                    samplesdz = np.zeros(sampleSize)
+                    samplesSum = np.zeros(sampleSize)
+                    currentSample = 0
+
                     derivAccelData = calcDeriv(accelData, accelData)
                     numberOfPoints = 0
                     numberOfPointsdz = 0
@@ -479,23 +485,28 @@ def processingData(sentData):
                 try:
                     GPSDistance += packet.hspeed #crude speed integration
                     
-                    if packet.hspeed > 2.5 and math.fabs(derivAccelData[2]) > 0.01:
-                        numberOfPoints += 1
-                        numberOfPointsdz += 1
-                        gradeSum += math.fabs(derivAccelData[2])
-                        dzSum += math.fabs(derivAccelData[2])
-                        dzAvg = dzSum / numberOfPointsdz
+                    samplesdy[currentSample] = 0.
+                    samplesdz[currentSample] = 0.
+                    samplesSum[currentSample] = 0.
+
+                    if packet.hspeed > 0.1: # and math.fabs(derivAccelData[1]) > 0.01: #y axis acceleration derivative
+                        samplesdy[currentSample] = math.fabs(derivAccelData[1])
+                        samplesSum[currentSample] += math.fabs(derivAccelData[1])
+
+                    if packet.hspeed > 2.5: # and math.fabs(derivAccelData[2]) > 0.01: #z axis acceleration derivative
+                        samplesdz[currentSample] = math.fabs(derivAccelData[2])
+                        samplesSum[currentSample] += math.fabs(derivAccelData[2])
                     
-                    if packet.hspeed > 0.1 and math.fabs(derivAccelData[1]) > 0.01:
-                        numberOfPoints += 1
-                        numberOfPointsdy += 1
-                        gradeSum += math.fabs(derivAccelData[1])
-                        dySum += math.fabs(derivAccelData[1])
-                        dyAvg = dySum / numberOfPointsdy
-                    
-                    if numberOfPoints > 0:
-                        grade = gradeSum / numberOfPoints
-                    
+                    if packet.hspeed > 0.1 and (math.fabs(derivAccelData[1]) > 0.01 or math.fabs(derivAccelData[2]) > 0.01):
+                        if currentSample >= sampleSize: #count from 0 to sampleSize-1
+                            currentSample = 0
+                        else:
+                            currentSample += 1
+
+                    dyAvg = np.mean(samplesdy)
+                    dzAvg = np.mean(samplesdz)
+                    grade = np.mean(samplesSum)
+                
                 except:
                     print("MAIN: Algorithm problem")
                 
