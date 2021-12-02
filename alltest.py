@@ -12,14 +12,19 @@ warning_threshold = 12 #acceleration at which a message will appear
 
 screenNumber = 0 #tells which screen is currently showed. 0 is starting screen, 1 is working program, 2 is ending screen
 totalScreenNumber = 2 #total number of screens
+newDataFlag = 0
 wagonType = 0 #choose wagon type
 buttonPinLeft = 22
 buttonPinMiddle = 27
 buttonPinRight = 17
 wagonName = {
-            0:"Gamma", 
-            1:"Beta", 
-            2:"Omega"
+            0:"Moderus Gamma", 
+            1:"Moderus Alfa", 
+            2:"Moderus Beta",
+            3:"Siemens Combino",
+            4:"Konstal 105Na",
+            5:"Tatra RT6",
+            6:"Solaris Tramino"
             }
 
 geocode_process = []
@@ -56,6 +61,10 @@ if gReverseGeocode:
 #global variables
 start_time = time.time() #save date and time of script start (seconds since epoch - UTC)
 
+mpu = mpu6050(0x68) #0x68 is device address on i2c bus
+
+mpu.bus.write_byte_data(0x68, 0x1A, 0) #this enables digital low-pass filter on accelerometer and gyro - added 11.11.21
+
 # Connect to the local gpsd
 gpsd.connect() #this takes a while (MUST BE SET UP USING sudo gpsd /dev/serial0 -F /var/run/gpsd.sock !!! #EDIT 06.08.21 - added automatic execution at system startup.)
 
@@ -66,15 +75,11 @@ MY_CUSTOM_BITMAP_FONT = [ # Note that "\0" is the zero-th character in the font
         0x00, 0x3e, 0x20, 0x20, 0x00, 0x3e, 0x0a, 0x0e
     ], #HELP
     [
-        0x00	, 0x32	, 0x2a	, 0x26	, 0x00	, 0x3e	, 0x22	, 0x3e	, 0x00	, 0x26	, 0x2a	, 0x32	, 0x00	, 0x3e	, 0x00	, 0x3c	, 0x12	, 0x3c
-
-    ], #ZOSIA
-    [
         0xff	, 0x81	, 0x81	, 0xff
     ], #O
     [
         0x00	, 0x46	, 0x89	, 0x89	, 0x89	, 0x72	, 0x00	, 0xff	, 0x11	, 0x11	, 0x11	, 0x01	, 0x60	, 0x96	, 0xa9	, 0xa6	, 0x40	, 0xa0	, 0x00	, 0xff	, 0x06	, 0x08	, 0x06	, 0xff	, 0x00	, 0xff	, 0x81	, 0x81	, 0x81	, 0x7e
-    ]#SF&MD
+    ]  #SF&MD
     ]
     
 #init display
@@ -98,8 +103,8 @@ def loggingFuncInit(geocoding):
     if geocoding:
         writer_init.writerow(['unix time', 'road', 'house', 'latitude', 'longitude', 'hspeed']) #changed to geocoding file 04.11.21 - added packet data 08.11.21
     else:
-        writer_init.writerow(['unix time', 'dt', 'ax', 'ay', 'az', 'a_length', 'latitude', 'longitude', 'speed']) #csv headers - removed road and street - 06.09.21 - added unix time - 04.11.21
-    return csv_init, writer_init
+        writer_init.writerow(['unix time', 'dt', 'ax', 'ay', 'az', 'a_length', 'average_length', 'gx', 'gy', 'gz']) #csv headers - removed road and street - 06.09.21 - added unix time - 04.11.21
+    return file_name, csv_init, writer_init
 
 #def debugFuncInit(): #old debug file init - removed 08.08.2021
 #    #this file is used for debugging purposes
@@ -146,9 +151,9 @@ def reverseGeocode(sentGeo):
             geocodingResult = geocode_api.query(packet.lat, packet.lon, reverse = True, zoom = 18) #takes a while the first time
             if geocodingResult.isReverse(): #if the response is actual reverse geocode data
                 sentGeo.send(geocodingResult) #send data to pipe
-                print("GEOCODE: Address found.")
+                #print("GEOCODE: Address found.")
                 #print(geocodingResult.address())
-            time.sleep(5) #limit the number of calls to API - possible cause of CPU hangs if not limited.
+            time.sleep(5) #limit the number of calls to API to 0.2 per second - possible cause of CPU hangs if not limited.
         except KeyboardInterrupt: #this is important. without it, the display process would run indefinitely.
             raise SystemExit
         except:
@@ -167,17 +172,19 @@ def button_1_pressed(self):         #change screen if button is pressed
     else:
         wagonType = 0
     print("middle button pressed: ")
-    s = returnTypeOfWagon(0)
+    s = returnTypeOfWagon(wagonType)
     print("s: ", s)
 
     
 def button_2_pressed(self):         #change screen if button is pressed
-    global wagonType
-    if wagonType > 0:
-        wagonType -= 1
-    else: 
-        wagonType = len(wagonName) - 1
-    print("left button pressed: ")
+    #global wagonType
+    #if wagonType > 0:
+    #    wagonType -= 1
+    #else: 
+    #    wagonType = len(wagonName) - 1
+    global newDataFlag
+    newDataFlag = 1
+    print("right button pressed: new travel")
     
 def changeScreenNumber():
     global screenNumber
@@ -201,6 +208,7 @@ def displayData(receivedData):
         
     global screenNumber
     global wagonType
+    global newDataFlag
     gpio.setmode(gpio.BCM)
     gpio.setup(17, gpio.IN, pull_up_down = gpio.PUD_DOWN)
     gpio.setup(27, gpio.IN, pull_up_down = gpio.PUD_DOWN)
@@ -220,7 +228,7 @@ def displayData(receivedData):
     
     if gLogGeocode: #this replaces init() as of 05.11.21
         try:
-            csv_file_geo, writer_geo = loggingFuncInit(1)
+            file_name_geo_, csv_file_geo, writer_geo = loggingFuncInit(1)
         except:
             print("Couldn't init debug file")
     
@@ -230,14 +238,23 @@ def displayData(receivedData):
         cur_timestamp = time.localtime(cur_time)
         
         #resolve reverse geocoded address
-        if gReverseGeocode:
-            try:
-                while receivedGeo.poll(): #only pull the latest result
-                    reverse_geocode_result = receivedGeo.recv()
-                    
-                #print(reverse_geocode_result.address())
-            except:
-                print("DISPLAY: Can't resolve address")
+        #if gReverseGeocode:
+        try:
+            while receivedGeo.poll(): #only pull the latest result
+                reverse_geocode_result = receivedGeo.recv()
+        except:
+            print("DISPLAY: Can't resolve address")
+            
+        try:
+            while receivedData.poll(): #this small loop reads only the last item in the pipe (basically skips elements until none are left)
+                #a_length, packet, cycle = receivedData.recv()
+                a_length, cycle = receivedData.recv()
+        except KeyboardInterrupt: #this is important. without it, the display process would run indefinitely.
+            if gReverseGeocode:
+                geocode_process.terminate()
+            raise SystemExit
+        except:
+            print("DISPLAY: No data received")
     
         oldroad = road
         oldhouse = house
@@ -246,6 +263,7 @@ def displayData(receivedData):
         
         try:
             road = reverse_geocode_result.address()['road']
+
         except: #fallback to old address if reverse geocoding failed (and quarter handling - 10.09.21)
             try:
                 road = reverse_geocode_result.address()['quarter'] #this is needed in case it's "osiedle" and not "ulica".
@@ -255,14 +273,23 @@ def displayData(receivedData):
             
         try:                
             house = reverse_geocode_result.address()['house_number']
+            #print("DISPLAY: " + road + " " + house)
         except: #fallback to old address if reverse geocoding failed
             house = oldhouse
         
-        #print("DISPLAY: " + road + " " + house)
+        if newDataFlag: #added 11.11.21
+            try:
+                writer_geo.writerow(["NEW DATA", "NEW DATA", "NEW DATA", "NEW DATA", "NEW DATA", "NEW DATA", "NEW DATA"])
+                csv_file_geo.flush()
+                newDataFlag = 0
+            except:
+                print("DISPLAY: Couldn't write to debug file")
+        
+        currentWagon = returnTypeOfWagon(wagonType)
         
         if gLogGeocode: #changed function from cycle time debugging to reverse geocode logging - 04.11.21
             try:
-                writer_geo.writerow([cur_time, road, house, packet.lat, packet.lon, packet.hspeed])
+                writer_geo.writerow([cur_time, road, house, packet.lat, packet.lon, packet.hspeed, currentWagon])
                 csv_file_geo.flush()
             except:
                 print("DISPLAY: Couldn't write to debug file")
@@ -285,22 +312,14 @@ def displayData(receivedData):
                 except:
                     time.sleep(0)
                 try:
-                    z = returnTypeOfWagon(wagonType)
+                    #z = returnTypeOfWagon(wagonType)
                     #print("s: ", z)
-                    legacy.text(draw, (0, 15), "Rodzaj: " + z, fill = "white", font = legacy.font.SINCLAIR_FONT) #Wagon type
+                    legacy.text(draw, (0, 15), "Rodzaj: ", fill = "white", font = legacy.font.SINCLAIR_FONT) #Wagon type
+                    legacy.text(draw, (0, 24), currentWagon, fill = "white", font = legacy.font.SINCLAIR_FONT) #Wagon type
                 except:
                     time.sleep(0)
         elif screenNumber == 1:
-            try:
-                while receivedData.poll(): #this small loop reads only the last item in the pipe (basically skips elements until none are left)
-                    #a_length, packet, cycle = receivedData.recv()
-                    a_length, cycle = receivedData.recv()
-            except KeyboardInterrupt: #this is important. without it, the display process would run indefinitely.
-                if gReverseGeocode:
-                    geocode_process.terminate()
-                raise SystemExit
-            except:
-                print("DISPLAY: No data received")
+            
             
             with canvas(display) as draw: #execution time: around 100ms (good!) #do tego momentu nic nie ruszaj ok?
                 if cur_timestamp.tm_sec%2:
@@ -383,25 +402,47 @@ def displayData(receivedData):
                     legacy.text(draw, (0, 15), "Koniec programu ", fill = "white", font = legacy.font.SINCLAIR_FONT) #Wagon type
                 except:
                     time.sleep(0)
-        time.sleep(0.1)
+
+def move_data_by_one(data):
+    
+    for i in range(10):
+        if i > 0:
+            data[i-1] = data[i]
+    return data
+    
+def average_data(data):
+    avg = 0.0
+    for i in range(10):
+        avg += data[i]
+    return avg / 10
 
 def processingData(sentData):
-    
-    mpu = mpu6050(0x68) #0x68 is device address on i2c bus
     
     #global reverse_geocode_result
     #init() - moved to beginning of program as of 04.11.21
     if gLog: #this replaces init() as of 05.11.21
         try:
-            csv_file, writer = loggingFuncInit(0)
+            file_name, csv_file, writer = loggingFuncInit(0)
         except:
             print("Couldn't init log file")
     
+    data_counter = 0
+    
     slowDown = False
     prevDateDiff = 0
+    
+    data_table = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+    
     while True:
         cur_time = time.time()
         date_diff = cur_time - start_time #save current loop timestamp in relation to starting time
+        
+        if data_counter >= 120: #this ensures that data are written to file every 120th cycle - 09.11.21
+            #print("closing and opening file")
+            csv_file.close()
+            csv_file = open(file_name, 'a', encoding = 'UTF8', newline = '')
+            writer = csv.writer(csv_file, delimiter = ';')
+            data_counter = 0
         
         if date_diff >= gRecording_time and gLog and stop_after_time_passed:
            csv_file.close()
@@ -423,7 +464,13 @@ def processingData(sentData):
             ay = accel_data['y']
             az = accel_data['z'] #save accelerometer elements to variables
             
+            gyro_data = mpu.get_gyro_data()
+            gx = gyro_data['x']
+            gy = gyro_data['y']
+            gz = gyro_data['z']
+            
             a_length = math.sqrt(ax**2 + ay**2 + az**2) #calculate [ax, ay, az] length (slightly faster than numpy)
+            
             #if a_length>13:
             #    slowDown = True
             #    timeSlowDown = cur_time
@@ -432,11 +479,19 @@ def processingData(sentData):
         except:
             print("MAIN: Can't resolve accelerometer data") #literally never happened
         
+        try:
+            data_table[9] = a_length
+            data_table = move_data_by_one(data_table)
+            average = average_data(data_table)
+            #print(average)
+        except:
+            print("MAIN: Couldn't calculate average")
+        
         if gLog:
             try:
                 #writer.writerow([cur_time, date_diff - prevDateDiff, ax, ay, az, a_length, packet.lat, packet.lon, packet.hspeed])
-                writer.writerow([cur_time, date_diff - prevDateDiff, ax, ay, az, a_length, 'removed', 'removed', 'removed'])
-                csv_file.flush()
+                writer.writerow([cur_time, date_diff - prevDateDiff, ax, ay, az, a_length, average, gx, gy, gz])
+                #csv_file.flush()
                 prevDateDiff = date_diff
             except:
                 print("MAIN: Couldn't write to log file")
@@ -456,6 +511,9 @@ def processingData(sentData):
             raise SystemExit
         except:
             print("MAIN: Couldn't send data to display")
+        
+        data_counter += 1
+        #print(data_counter)
         
         if cycle < Tp:
             time.sleep(Tp - cycle) #approximately allow for regular cycle times (alike RTC system)
