@@ -15,7 +15,7 @@ sampleSize = int(sampleSize) #calculate sample size based on current Tp
 gSpeedThreshold = gSpeedThreshold / 3.6 #convert to m/s
 
 screenNumber = 0 #tells which screen is currently shown. 0 is starting screen, 1 is working program, 2 is ending screen
-totalScreenNumber = 3 #total number of screens
+totalScreenNumber = 2 #total number of screens
 newDataFlag = 0
 wagonType = 0 #choose wagon type
 buttonPinLeft = 22
@@ -373,7 +373,6 @@ def displayData(receivedData):
                         except:
                             pass
                 elif screenNumber == 3:
-
                     with canvas(display) as draw: #execution time: around 100ms
                         if cur_timestamp.tm_sec%2:
                             if cur_timestamp.tm_min<10: #clock
@@ -392,8 +391,6 @@ def displayData(receivedData):
                         #    pass
                         try:
                             legacy.text(draw, (0, 15), "Grade\n: "+str(grade), fill = "white", font = legacy.font.SINCLAIR_FONT) #Main grade
-                            legacy.text(draw, (0, 15), "y grade\n: "+str(dyAvg), fill = "white", font = legacy.font.SINCLAIR_FONT) #y axis grade
-                            legacy.text(draw, (0, 15), "z grade\n: "+str(dzAvg), fill = "white", font = legacy.font.SINCLAIR_FONT) #z axis grade
                         except:
                             pass
                 
