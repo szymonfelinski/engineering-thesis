@@ -7,15 +7,15 @@ gReverseGeocode = 1 #attempt to reverse geocode GPS data?
 Tp = 0.1 #discrete step time, framerate of main program
 displayTp = 0.3 #framerate for the display
 
-gGradingTime = 3 #time to grade (minutes)
-gSpeedThreshold = 10 #minimum speed recorded by GPS for algorithm to make calculations (in km/h)
+gGradingTime = 0.5 #time to grade (minutes)
+gSpeedThreshold = 0.2 #minimum speed recorded by GPS for algorithm to make calculations (in km/h)
 
 sampleSize = gGradingTime * 60 / Tp
 sampleSize = int(sampleSize) #calculate sample size based on current Tp
 gSpeedThreshold = gSpeedThreshold / 3.6 #convert to m/s
 
 screenNumber = 0 #tells which screen is currently shown. 0 is starting screen, 1 is working program, 2 is ending screen
-totalScreenNumber = 3 #total number of screens
+totalScreenNumber = 2 #total number of screens
 newDataFlag = 0
 wagonType = 0 #choose wagon type
 buttonPinLeft = 22
@@ -373,39 +373,6 @@ def displayData(receivedData):
                         except:
                             pass
                 elif screenNumber == 3:
-                    #y axis grade conversion:
-                    if dyAvg > 0.025:
-                        dyAvg = 3
-                    elif dyAvg > 0.0225:
-                        dyAvg = 4
-                    elif dyAvg > 0.021:
-                        dyAvg = 5
-                    elif dyAvg > 0.019:
-                        dyAvg = 6
-                    elif dyAvg > 0.017:
-                        dyAvg = 7
-                    elif dyAvg > 0.0:
-                        dyAvg = 11
-                    else:
-                        dyAvg = 0
-
-                    #z axis grade conversion:
-                    if dzAvg > 0.02:
-                        dzAvg = 3
-                    elif dzAvg > 0.018:
-                        dzAvg = 4
-                    elif dzAvg > 0.016:
-                        dzAvg = 5
-                    elif dzAvg > 0.014:
-                        dzAvg = 6
-                    elif dzAvg > 0.012:
-                        dzAvg = 7
-                    elif dzAvg > 0.0:
-                        dzAvg = 11
-                    else:
-                        dzAvg = 0
-
-
                     with canvas(display) as draw: #execution time: around 100ms
                         if cur_timestamp.tm_sec%2:
                             if cur_timestamp.tm_min<10: #clock
@@ -423,9 +390,7 @@ def displayData(receivedData):
                         #except:
                         #    pass
                         try:
-                            legacy.text(draw, (0, 15), "Grade: "+str(grade), fill = "white", font = legacy.font.SINCLAIR_FONT) #Main grade
-                            legacy.text(draw, (0, 22), "y grade: "+str(dyAvg)+"/10", fill = "white", font = legacy.font.SINCLAIR_FONT) #y axis grade
-                            legacy.text(draw, (0, 29), "z grade: "+str(dzAvg)+"/10", fill = "white", font = legacy.font.SINCLAIR_FONT) #z axis grade
+                            legacy.text(draw, (0, 15), "Grade\n: "+str(grade), fill = "white", font = legacy.font.SINCLAIR_FONT) #Main grade
                         except:
                             pass
                 
