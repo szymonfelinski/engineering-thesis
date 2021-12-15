@@ -1,14 +1,18 @@
 #!/usr/bin/env python3
 
-gLogGeocode = 1 #will the csv debug file be written?
-gLog = 1 #will the csv data file be written? (if 0, the program has no stop condition!)
+gLogGeocode = 1 #will the csv geocode file be written?
+gLog = 1 #will the csv data file be written?
 gDisplayData = 1 #display data on the display?
 gReverseGeocode = 1 #attempt to reverse geocode GPS data?
-Tp = 0.1 #discrete step time, framerate
+Tp = 0.1 #discrete step time, framerate of main program
 displayTp = 0.3 #framerate for the display
 
-gGradingTime = 180 #time to grade (seconds)
-sampleSize = gGradingTime / Tp
+gGradingTime = 0.5 #time to grade (minutes)
+gSpeedThreshold = 0.2 #minimum speed recorded by GPS for algorithm to make calculations (in km/h)
+
+sampleSize = gGradingTime * 60 / Tp
+sampleSize = int(sampleSize) #calculate sample size based on current Tp
+gSpeedThreshold = gSpeedThreshold / 3.6 #convert to m/s
 
 screenNumber = 0 #tells which screen is currently shown. 0 is starting screen, 1 is working program, 2 is ending screen
 totalScreenNumber = 2 #total number of screens
@@ -109,7 +113,7 @@ def loggingFuncInit(geocoding):
     if geocoding:
         writer_init.writerow(['unix time', 'road', 'house', 'latitude', 'longitude', 'hspeed']) #changed to geocoding file 04.11.21 - added packet data 08.11.21
     else:
-        writer_init.writerow(['set time', 'actual time', 'ax', 'ay', 'az', 'day', 'daz', 'dyAvg', 'dzAvg', 'grade', 'gy', 'gz', 'latitude', 'longitude', 'hspeed']) #csv headers - removed road and street - 06.09.21 - added unix time - 04.11.21
+        writer_init.writerow(['set time', 'sample number', 'sample number dy', 'sample number dz', 'ax', 'ay', 'az', 'day', 'daz', 'dyAvg', 'dzAvg', 'grade', 'GPS distance', 'latitude', 'longitude', 'hspeed']) #csv headers - removed road and street - 06.09.21 - added unix time - 04.11.21
     return file_name, csv_init, writer_init
 
 def GPSResolve():
@@ -222,7 +226,7 @@ def displayData(receivedData):
                 
                 try:
                     while receivedData.poll(): #this small loop reads only the last item in the pipe (basically skips elements until none are left)
-                        [accData, derivAccData, grade, GPSDistance, packet] = receivedData.recv()
+                        [accData, derivAccData, grade, dyAvg, dzAvg, GPSDistance, packet] = receivedData.recv()
                 except KeyboardInterrupt: #this is important. without it, the display process would run indefinitely.
                     pass
                 except:
@@ -398,6 +402,7 @@ def calcDeriv(data1, data2):
 def processingData(sentData):
     
     global newDataFlag
+    global sampleSize
     
     gpio.setmode(gpio.BCM)
     gpio.setup(22, gpio.IN, pull_up_down = gpio.PUD_DOWN)
@@ -419,6 +424,18 @@ def processingData(sentData):
     killer = ProcessKill()
     
     csv_file = 0
+    data_counter = 0
+    currentSample = 0
+    currentSampledy = 0
+    currentSampledz = 0
+
+    showGradedy = False
+    showGradedz = False
+    showGrade = False
+    
+    samplesdy = np.zeros(sampleSize)
+    samplesdz = np.zeros(sampleSize)
+    samplesSum = np.zeros(sampleSize)
     
     while not killer.terminate:
         #curTime = time.time()
@@ -430,18 +447,14 @@ def processingData(sentData):
                     samplesdz = np.zeros(sampleSize)
                     samplesSum = np.zeros(sampleSize)
                     currentSample = 0
+                    currentSampledy = 0
+                    currentSampledz = 0
 
                     derivAccelData = calcDeriv(accelData, accelData)
-                    numberOfPoints = 0
-                    numberOfPointsdz = 0
-                    numberOfPointsdy = 0
-                    grade = 0
-                    gradeSum = 0
-                    dySum = 0
-                    dzSum = 0
-                    dyAvg = 0
-                    dzAvg = 0
-                    GPSDistance = 0
+                    grade = 0.
+                    dyAvg = 0.
+                    dzAvg = 0.
+                    GPSDistance = 0.
                     
                     data_counter = 0
                     if csv_file:
@@ -482,48 +495,66 @@ def processingData(sentData):
                 except:
                     print("MAIN: Can't resolve accelerometer data") #literally never happened
                 
-                try:
-                    GPSDistance += packet.hspeed #crude speed integration
+                if packet.hspeed >= gSpeedThreshold: #check if the speed reported by GPS is greater than the set threshold
+                    try:
+                        samplesdy[currentSampledy] = 0.
+                        samplesdz[currentSampledz] = 0.
+                        samplesSum[currentSample] = 0.
+
+                        tmpFlag = False
+
+                        if math.fabs(derivAccelData[1]) > 0.01: #y axis acceleration derivative
+                            samplesdy[currentSampledy] = math.fabs(derivAccelData[1])
+                            samplesSum[currentSample] = math.fabs(derivAccelData[1])
+                            if currentSampledy >= sampleSize-1: #count from 0 to sampleSize-1
+                                currentSampledy = 0
+                                showGradedy = True
+                            else:
+                                currentSampledy += 1
+                            tmpFlag = True
+
+                        if math.fabs(derivAccelData[2]) > 0.01: #z axis acceleration derivative
+                            samplesdz[currentSampledz] = math.fabs(derivAccelData[2])
+                            samplesSum[currentSample] = math.fabs(derivAccelData[2])
+                            if currentSampledz >= sampleSize-1: #count from 0 to sampleSize-1
+                                currentSampledz = 0
+                                showGradedz = True
+                            else:
+                                currentSampledz += 1
+                            tmpFlag = True
                     
-                    samplesdy[currentSample] = 0.
-                    samplesdz[currentSample] = 0.
-                    samplesSum[currentSample] = 0.
-
-                    if packet.hspeed > 0.1: # and math.fabs(derivAccelData[1]) > 0.01: #y axis acceleration derivative
-                        samplesdy[currentSample] = math.fabs(derivAccelData[1])
-                        samplesSum[currentSample] += math.fabs(derivAccelData[1])
-
-                    if packet.hspeed > 2.5: # and math.fabs(derivAccelData[2]) > 0.01: #z axis acceleration derivative
-                        samplesdz[currentSample] = math.fabs(derivAccelData[2])
-                        samplesSum[currentSample] += math.fabs(derivAccelData[2])
+                        if tmpFlag:
+                            GPSDistance += packet.hspeed #crude speed integration
+                            if currentSample >= sampleSize-1: #count from 0 to sampleSize-1
+                                currentSample = 0
+                                showGrade = True
+                            else:
+                                currentSample += 1
+                        
+                        if showGradedy:
+                            dyAvg = np.mean(samplesdy)
+                        
+                        if showGradedz:
+                            dzAvg = np.mean(samplesdz)
+                        
+                        if showGrade:
+                            grade = np.mean(samplesSum)
                     
-                    if packet.hspeed > 0.1 and (math.fabs(derivAccelData[1]) > 0.01 or math.fabs(derivAccelData[2]) > 0.01):
-                        if currentSample >= sampleSize: #count from 0 to sampleSize-1
-                            currentSample = 0
-                        else:
-                            currentSample += 1
-
-                    dyAvg = np.mean(samplesdy)
-                    dzAvg = np.mean(samplesdz)
-                    grade = np.mean(samplesSum)
-                
-                except:
-                    print("MAIN: Algorithm problem")
+                    except:
+                        print("MAIN: Algorithm problem")
                 
                 if gLog:
                     try:
-                        writer.writerow([nextTime, time.time(), accelData['x'], accelData['y'], accelData['z'], derivAccelData[1], derivAccelData[2], dyAvg, dzAvg, grade, GPSDistance, gyroData['z'], packet.lat, packet.lon, packet.hspeed])
+                        writer.writerow([nextTime, currentSample, currentSampledy, currentSampledz, accelData['x'], accelData['y'], accelData['z'], derivAccelData[1], derivAccelData[2], dyAvg, dzAvg, grade, GPSDistance, packet.lat, packet.lon, packet.hspeed])
                     except:
                         print("MAIN: Couldn't write to log file")
                 
                 try:
-                    sentData.send([accelData, derivAccelData, grade, GPSDistance, packet])
+                    sentData.send([accelData, derivAccelData, grade, dyAvg, dzAvg, GPSDistance, packet])
                 except KeyboardInterrupt: #this is important. without it, the processes would run indefinitely.
                     raise SystemExit
                 except:
                     print("MAIN: Couldn't send data to display")
-                
-                data_counter += 1
                 
                 nextTime += Tp
             else:
