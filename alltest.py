@@ -372,6 +372,27 @@ def displayData(receivedData):
                             legacy.text(draw, (0, 15), "Koniec programu ", fill = "white", font = legacy.font.SINCLAIR_FONT) #Wagon type
                         except:
                             pass
+                elif screenNumber == 3:
+                    with canvas(display) as draw: #execution time: around 100ms
+                        if cur_timestamp.tm_sec%2:
+                            if cur_timestamp.tm_min<10: #clock
+                                legacy.text(draw, (0, 0), str(cur_timestamp.tm_hour) + ":0" + str(cur_timestamp.tm_min), fill = "white")
+                            else:
+                                legacy.text(draw, (0, 0), str(cur_timestamp.tm_hour) + ":" + str(cur_timestamp.tm_min), fill = "white")
+                        else:
+                            if cur_timestamp.tm_min < 10: #clock
+                                legacy.text(draw, (0, 0), str(cur_timestamp.tm_hour) + " 0" + str(cur_timestamp.tm_min), fill = "white")
+                            else:
+                                legacy.text(draw, (0, 0), str(cur_timestamp.tm_hour) + " " + str(cur_timestamp.tm_min), fill = "white")
+                        #try:
+                        #    s = "SF&MD"
+                        #    legacy.text(draw, (d[0] - len(s) * 8, 0), "\2", fill = "white", font = MY_CUSTOM_BITMAP_FONT) #watermark
+                        #except:
+                        #    pass
+                        try:
+                            legacy.text(draw, (0, 15), "Grade\n: "+str(grade), fill = "white", font = legacy.font.SINCLAIR_FONT) #Main grade
+                        except:
+                            pass
                 
                 displayNextTime += displayTp
             else:
