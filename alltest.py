@@ -438,18 +438,18 @@ def displayData(receivedData):
         geocode_process.terminate()
         exit()
 
-def move_data_by_one(data):
+def move_data_by_one(data, length):
     
-    for i in range(10):
+    for i in range(length):
         if i > 0:
             data[i-1] = data[i]
     return data
     
-def average_data(data):
+def average_data(data, length):
     avg = 0.0
-    for i in range(10):
+    for i in range(length):
         avg += data[i]
-    return avg / 10
+    return avg / length
 
 def calcDeriv(data1, data2):
     derivative = [data1['x'] - data2['x'], data1['y'] - data2['y'], data1['z'] - data2['z']]
