@@ -8,7 +8,8 @@ Tp = 0.1 #discrete step time, framerate of main program
 displayTp = 0.3 #framerate for the display
 
 gGradingTime = 3 #time to grade (minutes)
-gSpeedThreshold = 10 #minimum speed recorded by GPS for algorithm to make calculations (in km/h)
+gSpeedThresholdY = 10 #minimum speed recorded by GPS for algorithm to make calculations (in km/h)
+gSpeedThresholdZ = 10 #minimum speed recorded by GPS for algorithm to make calculations (in km/h)
 
 sampleSize = gGradingTime * 60 / Tp
 sampleSize = int(sampleSize) #calculate sample size based on current Tp
@@ -551,53 +552,40 @@ def processingData(sentData):
                 except:
                     print("MAIN: Can't resolve accelerometer data") #literally never happened
                 
-                if packet.hspeed >= gSpeedThreshold: #check if the speed reported by GPS is greater than the set threshold
-                    try:
-                        samplesdy[currentSampledy] = 0.
-                        samplesdz[currentSampledz] = 0.
-                        samplesSum[currentSample] = 0.
-
-                        tmpFlag = False
-
-                        if math.fabs(derivAccelData[1]) > 0.01: #y axis acceleration derivative
-                            samplesdy[currentSampledy] = math.fabs(derivAccelData[1])
-                            samplesSum[currentSample] = math.fabs(derivAccelData[1])
-                            if currentSampledy >= sampleSize-1: #count from 0 to sampleSize-1
-                                currentSampledy = 0
-                                showGradedy = True
-                            else:
-                                currentSampledy += 1
-                            tmpFlag = True
-
-                        if math.fabs(derivAccelData[2]) > 0.01: #z axis acceleration derivative
-                            samplesdz[currentSampledz] = math.fabs(derivAccelData[2])
-                            samplesSum[currentSample] = math.fabs(derivAccelData[2])
-                            if currentSampledz >= sampleSize-1: #count from 0 to sampleSize-1
-                                currentSampledz = 0
-                                showGradedz = True
-                            else:
-                                currentSampledz += 1
-                            tmpFlag = True
+                
+                try:
+                    tmpFlag = False
+                    if packet.hspeed >= gSpeedThresholdY: #check if the speed reported by GPS is greater than the set threshold
+                        samplesdy[currentSampledy] = math.fabs(derivAccelData[1])
+                        tmpFlag = True
                     
-                        if tmpFlag:
-                            GPSDistance += packet.hspeed #crude speed integration
-                            if currentSample >= sampleSize-1: #count from 0 to sampleSize-1
-                                currentSample = 0
-                                showGrade = True
-                            else:
-                                currentSample += 1
-                        
-                        if showGradedy:
-                            dyAvg = np.mean(samplesdy)
-                        
-                        if showGradedz:
-                            dzAvg = np.mean(samplesdz)
-                        
-                        if showGrade:
-                            grade = np.mean(samplesSum)
+                    if currentSampledy >= sampleSize-1: #count from 0 to sampleSize-1
+                        currentSampledy = 0
+                        showGradedy = True
+                    else:
+                        currentSampledy += 1
                     
-                    except:
-                        print("MAIN: Algorithm problem")
+                    if packet.hspeed >= gSpeedThresholdZ: #check if the speed reported by GPS is greater than the set threshold
+                        samplesdz[currentSampledz] = math.fabs(derivAccelData[2])
+                        tmpFlag = True
+                    
+                    if currentSampledz >= sampleSize-1: #count from 0 to sampleSize-1
+                        currentSampledz = 0
+                        showGradedz = True
+                    else:
+                        currentSampledz += 1
+
+                    if tmpFlag:
+                        GPSDistance += packet.hspeed #basic speed integration
+                    
+                    if showGradedy:
+                        dyAvg = np.mean(samplesdy)
+                    
+                    if showGradedz:
+                        dzAvg = np.mean(samplesdz)
+                
+                except:
+                    print("MAIN: Algorithm problem")
                 
                 if gLog:
                     try:
