@@ -558,22 +558,22 @@ def processingData(sentData):
                     if packet.hspeed >= gSpeedThresholdY: #check if the speed reported by GPS is greater than the set threshold
                         samplesdy[currentSampledy] = math.fabs(derivAccelData[1])
                         tmpFlag = True
-                    
-                    if currentSampledy >= sampleSize-1: #count from 0 to sampleSize-1
-                        currentSampledy = 0
-                        showGradedy = True
-                    else:
-                        currentSampledy += 1
+
+                        if currentSampledy >= sampleSize-1: #count from 0 to sampleSize-1
+                            currentSampledy = 0
+                            showGradedy = True
+                        else:
+                            currentSampledy += 1
                     
                     if packet.hspeed >= gSpeedThresholdZ: #check if the speed reported by GPS is greater than the set threshold
                         samplesdz[currentSampledz] = math.fabs(derivAccelData[2])
                         tmpFlag = True
                     
-                    if currentSampledz >= sampleSize-1: #count from 0 to sampleSize-1
-                        currentSampledz = 0
-                        showGradedz = True
-                    else:
-                        currentSampledz += 1
+                        if currentSampledz >= sampleSize-1: #count from 0 to sampleSize-1
+                            currentSampledz = 0
+                            showGradedz = True
+                        else:
+                            currentSampledz += 1
 
                     if tmpFlag:
                         GPSDistance += packet.hspeed #basic speed integration
