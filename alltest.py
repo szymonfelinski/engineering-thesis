@@ -227,7 +227,7 @@ def displayData(receivedData):
                 
                 try:
                     while receivedData.poll(): #this small loop reads only the last item in the pipe (basically skips elements until none are left)
-                        [accData, derivAccData, grade, dyAvg, dzAvg, GPSDistance, packet] = receivedData.recv()
+                        [accData, derivAccData, dyAvg, dzAvg, GPSDistance, packet] = receivedData.recv()
                 except KeyboardInterrupt: #this is important. without it, the display process would run indefinitely.
                     pass
                 except:
@@ -295,10 +295,10 @@ def displayData(receivedData):
                             pass
                         
                         try:
-                            legacy.text(draw, (0, 15), "Rodzaj: ", fill = "white", font = legacy.font.SINCLAIR_FONT) #Wagon type
-                            legacy.text(draw, (0, 24), currentWagon, fill = "white", font = legacy.font.SINCLAIR_FONT) #Wagon type
-                            legacy.text(draw, (0, 64-12), "Distance: " + str(GPSDistance), fill = "white", font = legacy.font.TINY_FONT)
-                            legacy.text(draw, (0, 64-6), "Grade: " + str(grade), fill = "white", font = legacy.font.TINY_FONT)
+                            legacy.text(draw, (0, 15), "Rodzaj: " + currentWagon, fill = "white", font = legacy.font.SINCLAIR_FONT) #Wagon type
+                            legacy.text(draw, (0, 24), "Distance: " + str(GPSDistance), fill = "white", font = legacy.font.TINY_FONT) #Wagon type
+                            legacy.text(draw, (0, 64-12), "Grade z: " + str(dzAvg), fill = "white", font = legacy.font.TINY_FONT)
+                            legacy.text(draw, (0, 64-6), "Grade y: " + str(dyAvg), fill = "white", font = legacy.font.TINY_FONT)
                         except:
                             pass
                 elif screenNumber == 1:
@@ -594,7 +594,7 @@ def processingData(sentData):
                         print("MAIN: Couldn't write to log file")
                 
                 try:
-                    sentData.send([accelData, derivAccelData, grade, dyAvg, dzAvg, GPSDistance, packet])
+                    sentData.send([accelData, derivAccelData, dyAvg, dzAvg, GPSDistance, packet])
                 except KeyboardInterrupt: #this is important. without it, the processes would run indefinitely.
                     raise SystemExit
                 except:
