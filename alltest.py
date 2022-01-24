@@ -337,7 +337,6 @@ def displayData(receivedData):
                             legacy.text(draw, (0, 20), "Lat: " + str(packet.lat), fill = "white", font = legacy.font.TINY_FONT)
                             legacy.text(draw, (0, 26), "Lon: " + str(packet.lon), fill = "white", font = legacy.font.TINY_FONT)
                             legacy.text(draw, (0, 32), "Distance: " + str(GPSDistance), fill = "white", font = legacy.font.TINY_FONT)
-                            legacy.text(draw, (0, 38), "Grade: " + str(grade), fill = "white", font = legacy.font.TINY_FONT)
                         except:
                             pass
                         
@@ -352,7 +351,7 @@ def displayData(receivedData):
                             except:
                                 legacy.text(draw, (0, d[1]-6), "unknown address", fill = "white", font = legacy.font.TINY_FONT)
                                 print("DISPLAY: No address to display") 
-                elif screenNumber == 2:
+                elif screenNumber == 3:
                     with canvas(display) as draw: #execution time: around 100ms
                         if cur_timestamp.tm_sec%2:
                             if cur_timestamp.tm_min<10: #clock
@@ -373,7 +372,7 @@ def displayData(receivedData):
                             legacy.text(draw, (0, 15), "Koniec programu ", fill = "white", font = legacy.font.SINCLAIR_FONT) #Wagon type
                         except:
                             pass
-                elif screenNumber == 3:
+                elif screenNumber == 2:
                     #y axis grade conversion:
                     if dyAvg > 0.025:
                         dyAvg = 3
@@ -424,7 +423,6 @@ def displayData(receivedData):
                         #except:
                         #    pass
                         try:
-                            legacy.text(draw, (0, 15), "Grade: "+str(grade), fill = "white", font = legacy.font.SINCLAIR_FONT) #Main grade
                             legacy.text(draw, (0, 22), "y grade: "+str(dyAvg)+"/10", fill = "white", font = legacy.font.SINCLAIR_FONT) #y axis grade
                             legacy.text(draw, (0, 29), "z grade: "+str(dzAvg)+"/10", fill = "white", font = legacy.font.SINCLAIR_FONT) #z axis grade
                         except:
